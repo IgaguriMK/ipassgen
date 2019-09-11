@@ -6,8 +6,6 @@ use clap::{crate_authors, crate_description, crate_name, App, Arg, ArgMatches};
 use err::Error;
 use symbol::Symbols;
 
-const DEFAULT_CHARS_LEN: usize = 12;
-const DEFAULT_WORDS_LEN: usize = 6;
 const DEFAULT_MAX_LEN: usize = std::usize::MAX;
 
 // 2016年に、Nvidia GTX 1080を8台の構成でベンチマークとして以下のハッシュレートが達成されている。
@@ -106,7 +104,7 @@ fn w_main() -> Result<(), Error> {
             Arg::with_name("entropy")
                 .short("E")
                 .long("entropy")
-                .takes_value(true)
+                .default_value("71.45")
                 .help("Entropy requirement."),
         )
         .arg(
@@ -146,7 +144,7 @@ fn char_mode(matches: &ArgMatches) -> Result<(), Error> {
     }
 
     let symbols = Symbols::from_chars(chars.chars());
-    generate(matches, symbols, "", DEFAULT_CHARS_LEN)
+    generate(matches, symbols, "")
 }
 
 fn words_mode(matches: &ArgMatches, mode: &str) -> Result<(), Error> {
@@ -160,14 +158,13 @@ fn words_mode(matches: &ArgMatches, mode: &str) -> Result<(), Error> {
 
     let sep = matches.value_of("sep").unwrap();
 
-    generate(matches, symbols, sep, DEFAULT_WORDS_LEN)
+    generate(matches, symbols, sep)
 }
 
 fn generate(
     matches: &ArgMatches,
     symbols: Symbols,
     sep: &str,
-    default_len: usize,
 ) -> Result<(), Error> {
     let length = get_usize(&matches, "length")?;
     let entropy = get_f64(&matches, "entropy")?;
@@ -205,11 +202,7 @@ fn generate(
             let password = symbols.generate(length, sep, max_len)?;
             println!("{}", password);
         }
-        (None, None) => {
-            warn_entropy(symbols.estimate_entropy(default_len, sep.len(), max_len)?);
-            let password = symbols.generate(default_len, sep, max_len)?;
-            println!("{}", password);
-        }
+        (None, None) => panic!("entropy should have value."),
     }
 
     Ok(())
