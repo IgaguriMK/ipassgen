@@ -1,12 +1,17 @@
 mod err;
 mod symbol;
 
-use clap::{crate_authors, crate_description, crate_name, App, Arg, ArgMatches};
+use clap::{crate_authors, crate_description, crate_name, crate_version, App, Arg, ArgMatches};
 
 use err::Error;
 use symbol::Symbols;
 
-const DEFAULT_MAX_LEN: usize = std::usize::MAX;
+const DEFAULT_MAX_LEN: &str = "72";
+
+const MODE_CHAR: &str = "chars";
+const MODE_BASIC: &str = "basic-words";
+const MODE_DICEWARE: &str = "diceware";
+const MODE_DICEWARE_ALNUM: &str = "diceware-alnum";
 
 // 2016年に、Nvidia GTX 1080を8台の構成でベンチマークとして以下のハッシュレートが達成されている。
 // https://gist.github.com/epixoip/a83d38f412b4737e99bbef804a270c40
@@ -42,41 +47,33 @@ fn w_main() -> Result<(), Error> {
     let matches = App::new(crate_name!())
         .about(crate_description!())
         .author(crate_authors!("\n"))
+        .version(crate_version!())
         .arg(
             Arg::with_name("mode")
                 .short("m")
                 .long("mode")
-                .possible_values(&[
-                    "chars",
-                    "words-basic",
-                    "words-diceware",
-                    "words-diceware-alnum",
-                ])
+                .possible_values(&[MODE_CHAR, MODE_BASIC, MODE_DICEWARE, MODE_DICEWARE_ALNUM])
                 .default_value("chars")
                 .help("Generator mode."),
         )
         .arg(
             Arg::with_name("lower")
                 .short("a")
-                .long("lower")
                 .help("Use lower cases. (chars mode only)"),
         )
         .arg(
             Arg::with_name("captial")
                 .short("A")
-                .long("cap")
                 .help("Use catital cases. (chars mode only)"),
         )
         .arg(
             Arg::with_name("digit")
                 .short("0")
-                .long("digit")
                 .help("Use digits. (chars mode only)"),
         )
         .arg(
             Arg::with_name("all_symbols")
                 .short("!")
-                .long("all-symbols")
                 .help("Use all ASCII symbols (except ' '). (chars mode only)"),
         )
         .arg(
@@ -111,13 +108,13 @@ fn w_main() -> Result<(), Error> {
             Arg::with_name("max_length")
                 .short("M")
                 .long("max-length")
-                .takes_value(true)
+                .default_value(DEFAULT_MAX_LEN)
                 .help("Maximum length in byte."),
         )
         .get_matches();
 
     match matches.value_of("mode").unwrap() {
-        "chars" => char_mode(&matches),
+        MODE_CHAR => char_mode(&matches),
         mode => words_mode(&matches, mode),
     }
 }
@@ -149,9 +146,9 @@ fn char_mode(matches: &ArgMatches) -> Result<(), Error> {
 
 fn words_mode(matches: &ArgMatches, mode: &str) -> Result<(), Error> {
     let words = match mode {
-        "words-basic" => &include_bytes!("../resources/basic-words.txt")[..],
-        "words-diceware" => &include_bytes!("../resources/diceware.txt")[..],
-        "words-diceware-alnum" => &include_bytes!("../resources/diceware-alnum.txt")[..],
+        MODE_BASIC => &include_bytes!("../resources/basic-words.txt")[..],
+        MODE_DICEWARE => &include_bytes!("../resources/diceware.txt")[..],
+        MODE_DICEWARE_ALNUM => &include_bytes!("../resources/diceware-alnum.txt")[..],
         m => panic!("Invalid mode: {}", m),
     };
     let symbols = Symbols::from_bufread(words)?;
@@ -161,14 +158,10 @@ fn words_mode(matches: &ArgMatches, mode: &str) -> Result<(), Error> {
     generate(matches, symbols, sep)
 }
 
-fn generate(
-    matches: &ArgMatches,
-    symbols: Symbols,
-    sep: &str,
-) -> Result<(), Error> {
+fn generate(matches: &ArgMatches, symbols: Symbols, sep: &str) -> Result<(), Error> {
     let length = get_usize(&matches, "length")?;
     let entropy = get_f64(&matches, "entropy")?;
-    let max_len = get_usize(&matches, "max_length")?.unwrap_or(DEFAULT_MAX_LEN);
+    let max_len = get_usize(&matches, "max_length")?.unwrap();
 
     match (length, entropy) {
         (Some(length), Some(entropy)) => {
