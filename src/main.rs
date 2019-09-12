@@ -2,6 +2,7 @@ mod err;
 mod symbol;
 
 use clap::{crate_authors, crate_description, crate_name, crate_version, App, Arg, ArgMatches};
+use pwhash::sha512_crypt::hash;
 
 use err::Error;
 use symbol::Symbols;
@@ -111,15 +112,46 @@ fn w_main() -> Result<(), Error> {
                 .default_value(DEFAULT_MAX_LEN)
                 .help("Maximum length in byte."),
         )
+        .arg(
+            Arg::with_name("hash")
+                .short("h")
+                .long("hash")
+                .help("Print UNIX crypt() hash."),
+        )
+        .arg(
+            Arg::with_name("hash_num")
+                .short("H")
+                .long("hash-num")
+                .takes_value(true)
+                .help("Print different N hash."),
+        )
         .get_matches();
 
-    match matches.value_of("mode").unwrap() {
-        MODE_CHAR => char_mode(&matches),
-        mode => words_mode(&matches, mode),
+    let password = match matches.value_of("mode").unwrap() {
+        MODE_CHAR => char_mode(&matches)?,
+        mode => words_mode(&matches, mode)?,
+    };
+
+    print!("{}", password);
+    if matches.is_present("hash") {
+        let hash = hash(password.as_bytes())?;
+        println!("\t{}", hash);
+    } else if let Some(hash_num_str) = matches.value_of("hash_num") {
+        println!();
+
+        let hash_num: usize = hash_num_str.parse()?;
+        for _ in 0..hash_num {
+            let hash = hash(password.as_bytes())?;
+            println!("{}", hash);
+        }
+    } else {
+        println!();
     }
+
+    Ok(())
 }
 
-fn char_mode(matches: &ArgMatches) -> Result<(), Error> {
+fn char_mode(matches: &ArgMatches) -> Result<String, Error> {
     let mut chars = String::new();
     if matches.is_present("lower") {
         chars.push_str("abcdefghijklmnopqrstuvwxyz");
@@ -144,7 +176,7 @@ fn char_mode(matches: &ArgMatches) -> Result<(), Error> {
     generate(matches, symbols, "")
 }
 
-fn words_mode(matches: &ArgMatches, mode: &str) -> Result<(), Error> {
+fn words_mode(matches: &ArgMatches, mode: &str) -> Result<String, Error> {
     let words = match mode {
         MODE_BASIC => &include_bytes!("../resources/basic-words.txt")[..],
         MODE_DICEWARE => &include_bytes!("../resources/diceware.txt")[..],
@@ -158,7 +190,7 @@ fn words_mode(matches: &ArgMatches, mode: &str) -> Result<(), Error> {
     generate(matches, symbols, sep)
 }
 
-fn generate(matches: &ArgMatches, symbols: Symbols, sep: &str) -> Result<(), Error> {
+fn generate(matches: &ArgMatches, symbols: Symbols, sep: &str) -> Result<String, Error> {
     let length = get_usize(&matches, "length")?;
     let entropy = get_f64(&matches, "entropy")?;
     let max_len = get_usize(&matches, "max_length")?.unwrap();
@@ -173,10 +205,10 @@ fn generate(matches: &ArgMatches, symbols: Symbols, sep: &str) -> Result<(), Err
                 )));
             }
             let password = symbols.generate(length, sep, max_len)?;
-            println!("{}", password);
+            Ok(password)
         }
         (None, Some(entropy)) => {
-            for length in 4.. {
+            for length in 1.. {
                 let ee = symbols.estimate_entropy(length, sep.len(), max_len)?;
 
                 if ee == 0.0 {
@@ -185,20 +217,18 @@ fn generate(matches: &ArgMatches, symbols: Symbols, sep: &str) -> Result<(), Err
 
                 if ee >= entropy {
                     let password = symbols.generate(length, sep, max_len)?;
-                    println!("{}", password);
-                    break;
+                    return Ok(password);
                 }
             }
+            unreachable!()
         }
         (Some(length), None) => {
             warn_entropy(symbols.estimate_entropy(length, sep.len(), max_len)?);
             let password = symbols.generate(length, sep, max_len)?;
-            println!("{}", password);
+            Ok(password)
         }
         (None, None) => panic!("entropy should have value."),
     }
-
-    Ok(())
 }
 
 fn warn_entropy(ee: f64) {

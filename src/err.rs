@@ -33,6 +33,7 @@ macro_rules! impl_error_from {
 impl_error_from!(io::Error);
 impl_error_from!(num::ParseFloatError);
 impl_error_from!(num::ParseIntError);
+impl_error_from!(pwhash::error::Error);
 
 impl_error_from!(rand::Error);
 

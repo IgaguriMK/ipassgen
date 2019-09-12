@@ -19,5 +19,6 @@ repository = "https://github.com/IgaguriMK/sbak"
 
 [dependencies]
 clap = "2.33"
+pwhash = "0.3.0"
 rand = "0.7.0"
 rand_xorshift = "0.2.0"
