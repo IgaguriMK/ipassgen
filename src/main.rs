@@ -119,32 +119,27 @@ fn w_main() -> Result<(), Error> {
                 .help("Print UNIX crypt() hash."),
         )
         .arg(
-            Arg::with_name("hash_num")
-                .short("H")
-                .long("hash-num")
-                .takes_value(true)
-                .help("Print different N hash."),
+            Arg::with_name("num")
+                .short("N")
+                .long("num")
+                .default_value("1")
+                .help("Print different N passwords."),
         )
         .get_matches();
 
-    let password = match matches.value_of("mode").unwrap() {
-        MODE_CHAR => char_mode(&matches)?,
-        mode => words_mode(&matches, mode)?,
-    };
+    let n: usize = matches.value_of("num").unwrap().parse()?;
 
-    print!("{}", password);
-    if matches.is_present("hash") {
-        let hash = hash(password.as_bytes())?;
-        println!("\t{}", hash);
-    } else if let Some(hash_num_str) = matches.value_of("hash_num") {
-        println!();
+    for _ in 0..n {
+        let password = match matches.value_of("mode").unwrap() {
+            MODE_CHAR => char_mode(&matches)?,
+            mode => words_mode(&matches, mode)?,
+        };
 
-        let hash_num: usize = hash_num_str.parse()?;
-        for _ in 0..hash_num {
+        print!("{}", password);
+        if matches.is_present("hash") {
             let hash = hash(password.as_bytes())?;
-            println!("{}", hash);
+            print!("\t{}", hash);
         }
-    } else {
         println!();
     }
 
