@@ -114,7 +114,7 @@ fn w_main() -> Result<(), Error> {
         )
         .arg(
             Arg::with_name("hash")
-                .short("h")
+                .short("H")
                 .long("hash")
                 .help("Print UNIX crypt() hash."),
         )
