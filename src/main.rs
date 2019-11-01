@@ -1,7 +1,7 @@
 mod err;
 mod symbol;
 
-use clap::{crate_authors, crate_description, crate_name, crate_version, App, Arg, ArgMatches};
+use clap::{crate_description, crate_name, crate_version, App, Arg, ArgMatches};
 use pwhash::sha512_crypt::hash;
 
 use err::Error;
@@ -47,7 +47,7 @@ fn main() {
 fn w_main() -> Result<(), Error> {
     let matches = App::new(crate_name!())
         .about(crate_description!())
-        .author(crate_authors!("\n"))
+        .author("Igaguri <igagurimk@gmail.com>")
         .version(crate_version!())
         .arg(
             Arg::with_name("mode")
