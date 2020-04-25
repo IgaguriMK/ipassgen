@@ -11,8 +11,8 @@ license = "MIT OR Apache-2.0"
 authors = ["Igaguri <igagurimk@gmail.com>"]
 readme = "README.md"
 
-documentation = "https://docs.rs/crate-name"
-repository = "https://github.com/IgaguriMK/sbak"
+documentation = "https://docs.rs/ipassgen"
+repository = "https://github.com/IgaguriMK/ipassgen"
 
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
