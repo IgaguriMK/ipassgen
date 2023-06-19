@@ -1,18 +1,15 @@
 mod err;
 mod symbol;
 
-use clap::{crate_description, crate_name, crate_version, App, Arg, ArgMatches};
+use std::fmt::{self, Display};
+
+use clap::{Parser, ValueEnum};
 use pwhash::sha512_crypt::hash;
 
 use err::Error;
 use symbol::Symbols;
 
 const DEFAULT_MAX_LEN: &str = "72";
-
-const MODE_CHAR: &str = "chars";
-const MODE_BASIC: &str = "basic-words";
-const MODE_DICEWARE: &str = "diceware";
-const MODE_DICEWARE_ALNUM: &str = "diceware-alnum";
 
 // 2016年に、Nvidia GTX 1080を8台の構成でベンチマークとして以下のハッシュレートが達成されている。
 // https://gist.github.com/epixoip/a83d38f412b4737e99bbef804a270c40
@@ -39,190 +36,167 @@ const ENTROPY_CRITICAL_WARN: f64 = 45.0;
 const ENTROPY_WARN: f64 = 55.0;
 
 fn main() {
-    if let Err(e) = w_main() {
+    let args = Args::parse();
+    if let Err(e) = args.run() {
         eprintln!("Error: {}", e);
     }
 }
 
-fn w_main() -> Result<(), Error> {
-    let matches = App::new(crate_name!())
-        .about(crate_description!())
-        .author("Igaguri <igagurimk@gmail.com>")
-        .version(crate_version!())
-        .arg(
-            Arg::with_name("mode")
-                .short("m")
-                .long("mode")
-                .possible_values(&[MODE_CHAR, MODE_BASIC, MODE_DICEWARE, MODE_DICEWARE_ALNUM])
-                .default_value("chars")
-                .help("Generator mode."),
-        )
-        .arg(
-            Arg::with_name("lower")
-                .short("a")
-                .help("Use lower cases. (chars mode only)"),
-        )
-        .arg(
-            Arg::with_name("captial")
-                .short("A")
-                .help("Use catital cases. (chars mode only)"),
-        )
-        .arg(
-            Arg::with_name("digit")
-                .short("0")
-                .help("Use digits. (chars mode only)"),
-        )
-        .arg(
-            Arg::with_name("all_symbols")
-                .short("!")
-                .help("Use all ASCII symbols (except ' '). (chars mode only)"),
-        )
-        .arg(
-            Arg::with_name("symbols")
-                .short("s")
-                .long("symbols")
-                .takes_value(true)
-                .help("Use specified symbols. (chars mode only)"),
-        )
-        .arg(
-            Arg::with_name("sep")
-                .short("S")
-                .long("sep")
-                .default_value(" ")
-                .help("Words separator. (words mode only)"),
-        )
-        .arg(
-            Arg::with_name("length")
-                .short("L")
-                .long("length")
-                .takes_value(true)
-                .help("Length of symbols sequence."),
-        )
-        .arg(
-            Arg::with_name("entropy")
-                .short("E")
-                .long("entropy")
-                .default_value("71.45")
-                .help("Entropy requirement."),
-        )
-        .arg(
-            Arg::with_name("max_length")
-                .short("M")
-                .long("max-length")
-                .default_value(DEFAULT_MAX_LEN)
-                .help("Maximum length in byte."),
-        )
-        .arg(
-            Arg::with_name("hash")
-                .short("H")
-                .long("hash")
-                .help("Print UNIX crypt() hash."),
-        )
-        .arg(
-            Arg::with_name("num")
-                .short("N")
-                .long("num")
-                .default_value("1")
-                .help("Print different N passwords."),
-        )
-        .get_matches();
+#[derive(Debug, Parser)]
+struct Args {
+    /// Generator mode
+    #[clap(short = 'm', long, default_value = "chars")]
+    mode: Mode,
 
-    let n: usize = matches.value_of("num").unwrap().parse()?;
+    /// Use lower cases. (chars mode only)
+    #[clap(short = 'a', long)]
+    lower: bool,
+    /// Use catital cases. (chars mode only)
+    #[clap(short = 'A', long)]
+    capital: bool,
+    /// Use digits. (chars mode only)
+    #[clap(short = '0', long)]
+    digit: bool,
+    /// Use all ASCII symbols (except ' '). (chars mode only)
+    #[clap(short = '!', long)]
+    all_symbols: bool,
+    /// Use specified symbols. (chars mode only)
+    #[clap(short = 's', long)]
+    symbols: Option<String>,
 
-    for _ in 0..n {
-        let password = match matches.value_of("mode").unwrap() {
-            MODE_CHAR => char_mode(&matches)?,
-            mode => words_mode(&matches, mode)?,
+    /// Words separator. (words mode only)
+    #[clap(short = 'S', long, default_value = " ")]
+    sep: String,
+
+    /// Length of symbols sequence.
+    #[clap(short = 'L', long)]
+    length: Option<usize>,
+    /// Entropy requirement.
+    #[clap(short = 'E', long, default_value = "71.45")]
+    entropy: f64,
+    /// Maximum length of symbols sequence.
+    #[clap(short = 'M', long, default_value = DEFAULT_MAX_LEN)]
+    max_len: usize,
+
+    /// Print UNIX crypt() hash.
+    #[clap(short = 'H', long)]
+    hash: bool,
+
+    /// Print different N passwords.
+    #[clap(short = 'N', long, default_value = "1")]
+    count: usize,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum Mode {
+    Chars,
+    BasicWords,
+    Diceware,
+    DicewareAlnum,
+}
+
+impl Display for Mode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Mode::Chars => write!(f, "chars"),
+            Mode::BasicWords => write!(f, "basic-words"),
+            Mode::Diceware => write!(f, "diceware"),
+            Mode::DicewareAlnum => write!(f, "diceware-alnum"),
+        }
+    }
+}
+
+impl Args {
+    fn run(&self) -> Result<(), Error> {
+        warn_entropy(self.entropy);
+
+        for _ in 0..self.count {
+            let password = match self.mode {
+                Mode::Chars => self.char_mode()?,
+                _ => self.words_mode()?,
+            };
+
+            print!("{}", password);
+            if self.hash {
+                let hash = hash(password.as_bytes())?;
+                print!("\t{}", hash);
+            }
+            println!();
+        }
+
+        Ok(())
+    }
+
+    fn char_mode(&self) -> Result<String, Error> {
+        let mut chars = String::new();
+        if self.lower {
+            chars.push_str("abcdefghijklmnopqrstuvwxyz");
+        }
+        if self.capital {
+            chars.push_str("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        }
+        if self.digit {
+            chars.push_str("0123456789");
+        }
+        if self.all_symbols {
+            chars.push_str("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~");
+        } else if let Some(ref ss) = self.symbols {
+            chars.push_str(ss);
+        }
+
+        if chars.is_empty() {
+            return Err(Error::new("No characters.".to_owned()));
+        }
+
+        let symbols = Symbols::from_chars(chars.chars());
+        self.generate(symbols, "")
+    }
+
+    fn words_mode(&self) -> Result<String, Error> {
+        let words = match self.mode {
+            Mode::BasicWords => &include_bytes!("../resources/basic-words.txt")[..],
+            Mode::Diceware => &include_bytes!("../resources/diceware.txt")[..],
+            Mode::DicewareAlnum => &include_bytes!("../resources/diceware-alnum.txt")[..],
+            m => panic!("Invalid mode: {}", m),
         };
+        let symbols = Symbols::from_bufread(words)?;
 
-        print!("{}", password);
-        if matches.is_present("hash") {
-            let hash = hash(password.as_bytes())?;
-            print!("\t{}", hash);
-        }
-        println!();
+        let sep = self.sep.as_str();
+
+        self.generate(symbols, sep)
     }
 
-    Ok(())
-}
+    fn generate(&self, symbols: Symbols, sep: &str) -> Result<String, Error> {
+        let max_len = self.max_len;
 
-fn char_mode(matches: &ArgMatches) -> Result<String, Error> {
-    let mut chars = String::new();
-    if matches.is_present("lower") {
-        chars.push_str("abcdefghijklmnopqrstuvwxyz");
-    }
-    if matches.is_present("captial") {
-        chars.push_str("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
-    }
-    if matches.is_present("digit") {
-        chars.push_str("0123456789");
-    }
-    if matches.is_present("all_symbols") {
-        chars.push_str("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~");
-    } else if let Some(ss) = matches.value_of("symbols") {
-        chars.push_str(ss);
-    }
-
-    if chars.is_empty() {
-        return Err(Error::new("No characters.".to_owned()));
-    }
-
-    let symbols = Symbols::from_chars(chars.chars());
-    generate(matches, symbols, "")
-}
-
-fn words_mode(matches: &ArgMatches, mode: &str) -> Result<String, Error> {
-    let words = match mode {
-        MODE_BASIC => &include_bytes!("../resources/basic-words.txt")[..],
-        MODE_DICEWARE => &include_bytes!("../resources/diceware.txt")[..],
-        MODE_DICEWARE_ALNUM => &include_bytes!("../resources/diceware-alnum.txt")[..],
-        m => panic!("Invalid mode: {}", m),
-    };
-    let symbols = Symbols::from_bufread(words)?;
-
-    let sep = matches.value_of("sep").unwrap();
-
-    generate(matches, symbols, sep)
-}
-
-fn generate(matches: &ArgMatches, symbols: Symbols, sep: &str) -> Result<String, Error> {
-    let length = get_usize(&matches, "length")?;
-    let entropy = get_f64(&matches, "entropy")?;
-    let max_len = get_usize(&matches, "max_length")?.unwrap();
-
-    match (length, entropy) {
-        (Some(length), Some(entropy)) => {
-            let ee = symbols.estimate_entropy(length, sep.len(), max_len)?;
-            if ee < entropy {
-                return Err(Error::new(format!(
-                    "Required entropy is {}, but only {:.2}",
-                    entropy, ee
-                )));
-            }
-            let password = symbols.generate(length, sep, max_len)?;
-            Ok(password)
-        }
-        (None, Some(entropy)) => {
-            for length in 1.. {
+        match self.length {
+            Some(length) => {
                 let ee = symbols.estimate_entropy(length, sep.len(), max_len)?;
-
-                if ee == 0.0 {
-                    return Err(Error::new("Never met entropy requirement.".to_owned()));
+                if ee < self.entropy {
+                    return Err(Error::new(format!(
+                        "Required entropy is {}, but only {:.2}",
+                        self.entropy, ee
+                    )));
                 }
-
-                if ee >= entropy {
-                    let password = symbols.generate(length, sep, max_len)?;
-                    return Ok(password);
-                }
+                let password = symbols.generate(length, sep, max_len)?;
+                Ok(password)
             }
-            unreachable!()
+            None => {
+                for length in 1.. {
+                    let ee = symbols.estimate_entropy(length, sep.len(), max_len)?;
+
+                    if ee == 0.0 {
+                        return Err(Error::new("Never met entropy requirement.".to_owned()));
+                    }
+
+                    if ee >= self.entropy {
+                        let password = symbols.generate(length, sep, max_len)?;
+                        return Ok(password);
+                    }
+                }
+                unreachable!()
+            }
         }
-        (Some(length), None) => {
-            warn_entropy(symbols.estimate_entropy(length, sep.len(), max_len)?);
-            let password = symbols.generate(length, sep, max_len)?;
-            Ok(password)
-        }
-        (None, None) => panic!("entropy should have value."),
     }
 }
 
@@ -238,21 +212,5 @@ fn warn_entropy(ee: f64) {
             ee, ENTROPY_WARN
         );
         return;
-    }
-}
-
-fn get_usize(matches: &ArgMatches, key: &str) -> Result<Option<usize>, Error> {
-    if let Some(s) = matches.value_of(key) {
-        Ok(Some(s.parse()?))
-    } else {
-        Ok(None)
-    }
-}
-
-fn get_f64(matches: &ArgMatches, key: &str) -> Result<Option<f64>, Error> {
-    if let Some(s) = matches.value_of(key) {
-        Ok(Some(s.parse()?))
-    } else {
-        Ok(None)
     }
 }
