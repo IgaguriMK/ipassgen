@@ -8,13 +8,13 @@ Entropy-requirement based password generator.
 Char-based mode:
 ```
 $ ipassgen -aA0 -E 80.0
-k|NhbSM:,5.g.
+BIrfarGdBN666q
 ```
 
 Word-based mode (Diceware):
 ```
 $ ipassgen -m diceware -E 80.0
-curia enjoy rap grady arrow slim mummy
+jh dang front red von wack y's
 ```
 
 ## Options
