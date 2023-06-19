@@ -2,7 +2,7 @@
 name = "ipassgen"
 description = "A password generator."
 
-version = "0.1.0"
+version = "0.2.0"
 categories = ["command-line-utilities"]
 keywords = ["cli", "password"]
 
@@ -19,6 +19,6 @@ repository = "https://github.com/IgaguriMK/ipassgen"
 
 [dependencies]
 clap = { version = "4.3.4", features = ["derive"] }
-pwhash = "0.3.0"
-rand = "0.7.0"
-rand_xorshift = "0.2.0"
+pwhash = "1.0.0"
+rand = "0.8.5"
+rand_xorshift = "0.3.0"
