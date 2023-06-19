@@ -3,7 +3,7 @@ use std::io::BufRead;
 
 use rand::rngs::OsRng;
 use rand::seq::SliceRandom;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 
 use crate::err::Error;
@@ -47,23 +47,29 @@ impl Symbols {
     }
 
     /**********************/
-    pub fn generate(&self, n: usize, sep: &str, max_bytes: usize) -> Result<String, Error> {
+    pub fn generate(&self, n: usize, sep: &str, validate: impl Fn(&str) -> bool) -> String {
         loop {
-            let mut res = String::new();
-
-            for i in 0..n {
-                if i > 0 {
-                    res.push_str(sep);
-                }
-                let s = self.list.choose(&mut OsRng).unwrap();
-                res.push_str(&s);
-            }
-
-            if res.len() <= max_bytes {
-                return Ok(res);
+            let password = self.generate_inner(&mut OsRng, n, sep);
+            if validate(&password) {
+                return password;
             }
         }
     }
+
+    fn generate_inner(&self, rng: &mut impl Rng, n: usize, sep: &str) -> String {
+        let mut res = String::new();
+
+        for i in 0..n {
+            if i > 0 {
+                res.push_str(sep);
+            }
+            let s = self.list.choose(rng).unwrap();
+            res.push_str(&s);
+        }
+
+        res
+    }
+
     pub fn base_entropy(&self, n: usize) -> f64 {
         if self.list.is_empty() {
             return 0.0;
@@ -74,32 +80,19 @@ impl Symbols {
     pub fn estimate_entropy(
         &self,
         n: usize,
-        sep_len: usize,
-        max_bytes: usize,
+        sep: &str,
+        validate: impl Fn(&str) -> bool,
     ) -> Result<f64, Error> {
         let base_entropy = self.base_entropy(n);
         if base_entropy == 0.0 {
             return Ok(0.0);
         }
 
-        let max_symbol_len = self.max_len();
-        let total_sep_len = (n - 1) * sep_len;
-        let max_len = n * max_symbol_len + total_sep_len;
-
-        if max_len < max_bytes {
-            return Ok(base_entropy);
-        }
-
-        let lengthes: Vec<usize> = self.list.iter().map(String::len).collect();
         let mut rng = XorShiftRng::from_rng(OsRng)?;
         let mut success = 0usize;
         for _ in 0..ENTROPY_ESTIMATE_SAMPLES {
-            let mut l = total_sep_len;
-            for _ in 0..n {
-                l += lengthes.choose(&mut rng).unwrap();
-            }
-
-            if l <= max_bytes {
+            let password = self.generate_inner(&mut rng, n, sep);
+            if validate(&password) {
                 success += 1;
             }
         }
@@ -110,11 +103,5 @@ impl Symbols {
 
         let success_rate = (success as f64) / (ENTROPY_ESTIMATE_SAMPLES as f64);
         Ok((base_entropy + success_rate.log2() - ENTROPY_SAFETY_MERGIN_RATIO.log2()).max(0.0))
-    }
-
-    /**********************/
-
-    fn max_len(&self) -> usize {
-        self.list.iter().map(String::len).max().unwrap_or(0)
     }
 }

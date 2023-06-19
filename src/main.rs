@@ -63,6 +63,9 @@ struct Args {
     /// Use specified symbols. (chars mode only)
     #[clap(short = 's', long)]
     symbols: Option<String>,
+    /// Allow non-appear symbols. (chars mode only)
+    #[clap(long)]
+    non_appear: bool,
 
     /// Words separator. (words mode only)
     #[clap(short = 'S', long, default_value = " ")]
@@ -129,19 +132,29 @@ impl Args {
 
     fn char_mode(&self) -> Result<String, Error> {
         let mut chars = String::new();
+        let mut groups = Vec::<&str>::new();
         if self.lower {
-            chars.push_str("abcdefghijklmnopqrstuvwxyz");
+            let s = "abcdefghijklmnopqrstuvwxyz";
+            groups.push(s);
+            chars.push_str(s);
         }
         if self.capital {
-            chars.push_str("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+            let s = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            groups.push(s);
+            chars.push_str(s);
         }
         if self.digit {
-            chars.push_str("0123456789");
+            let s = "0123456789";
+            groups.push(s);
+            chars.push_str(s);
         }
         if self.all_symbols {
-            chars.push_str("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~");
-        } else if let Some(ref ss) = self.symbols {
-            chars.push_str(ss);
+            let s = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
+            groups.push(s);
+            chars.push_str(s);
+        } else if let Some(ref s) = self.symbols {
+            groups.push(s);
+            chars.push_str(s);
         }
 
         if chars.is_empty() {
@@ -149,7 +162,11 @@ impl Args {
         }
 
         let symbols = Symbols::from_chars(chars.chars());
-        self.generate(symbols, "")
+
+        let validate =
+            |s: &str| self.non_appear || groups.iter().all(|g| s.chars().any(|c| g.contains(c)));
+
+        self.generate(symbols, "", validate)
     }
 
     fn words_mode(&self) -> Result<String, Error> {
@@ -163,34 +180,40 @@ impl Args {
 
         let sep = self.sep.as_str();
 
-        self.generate(symbols, sep)
+        self.generate(symbols, sep, |s| s.len() <= self.max_len)
     }
 
-    fn generate(&self, symbols: Symbols, sep: &str) -> Result<String, Error> {
-        let max_len = self.max_len;
-
+    fn generate(
+        &self,
+        symbols: Symbols,
+        sep: &str,
+        validate: impl Fn(&str) -> bool,
+    ) -> Result<String, Error> {
         match self.length {
             Some(length) => {
-                let ee = symbols.estimate_entropy(length, sep.len(), max_len)?;
-                if ee < self.entropy {
-                    return Err(Error::new(format!(
-                        "Required entropy is {}, but only {:.2}",
-                        self.entropy, ee
-                    )));
+                let ee = symbols.estimate_entropy(length, sep, &validate)?;
+                if ee == 0.0 {
+                    return Err(Error::new(
+                        "It is impossible to meet the conditions.".to_owned(),
+                    ));
                 }
-                let password = symbols.generate(length, sep, max_len)?;
+
+                let password = symbols.generate(length, sep, &validate);
                 Ok(password)
             }
             None => {
-                for length in 1.. {
-                    let ee = symbols.estimate_entropy(length, sep.len(), max_len)?;
+                let base = symbols.base_entropy(1);
+                let minimum_len = (self.entropy / base).ceil() as usize;
+
+                for length in minimum_len.. {
+                    let ee = symbols.estimate_entropy(length, sep, &validate)?;
 
                     if ee == 0.0 {
                         return Err(Error::new("Never met entropy requirement.".to_owned()));
                     }
 
                     if ee >= self.entropy {
-                        let password = symbols.generate(length, sep, max_len)?;
+                        let password = symbols.generate(length, sep, &validate);
                         return Ok(password);
                     }
                 }
