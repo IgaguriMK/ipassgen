@@ -18,6 +18,7 @@ repository = "https://github.com/IgaguriMK/ipassgen"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.71"
 clap = { version = "4.3.4", features = ["derive"] }
 pwhash = "1.0.0"
 rand = "0.8.5"

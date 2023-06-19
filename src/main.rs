@@ -1,4 +1,3 @@
-mod err;
 mod symbol;
 
 use std::fmt::{self, Display};
@@ -6,7 +5,7 @@ use std::fmt::{self, Display};
 use clap::{Parser, ValueEnum};
 use pwhash::sha512_crypt::hash;
 
-use err::Error;
+use anyhow::{bail, Result};
 use symbol::Symbols;
 
 const DEFAULT_MAX_LEN: &str = "72";
@@ -110,7 +109,7 @@ impl Display for Mode {
 }
 
 impl Args {
-    fn run(&self) -> Result<(), Error> {
+    fn run(&self) -> Result<()> {
         warn_entropy(self.entropy);
 
         for _ in 0..self.count {
@@ -130,7 +129,7 @@ impl Args {
         Ok(())
     }
 
-    fn char_mode(&self) -> Result<String, Error> {
+    fn char_mode(&self) -> Result<String> {
         let mut chars = String::new();
         let mut groups = Vec::<&str>::new();
         if self.lower {
@@ -158,7 +157,7 @@ impl Args {
         }
 
         if chars.is_empty() {
-            return Err(Error::new("No characters.".to_owned()));
+            bail!("No characters.");
         }
 
         let symbols = Symbols::from_chars(chars.chars());
@@ -169,7 +168,7 @@ impl Args {
         self.generate(symbols, "", validate)
     }
 
-    fn words_mode(&self) -> Result<String, Error> {
+    fn words_mode(&self) -> Result<String> {
         let words = match self.mode {
             Mode::BasicWords => &include_bytes!("../resources/basic-words.txt")[..],
             Mode::Diceware => &include_bytes!("../resources/diceware.txt")[..],
@@ -188,14 +187,12 @@ impl Args {
         symbols: Symbols,
         sep: &str,
         validate: impl Fn(&str) -> bool,
-    ) -> Result<String, Error> {
+    ) -> Result<String> {
         match self.length {
             Some(length) => {
                 let ee = symbols.estimate_entropy(length, sep, &validate)?;
                 if ee == 0.0 {
-                    return Err(Error::new(
-                        "It is impossible to meet the conditions.".to_owned(),
-                    ));
+                    bail!("It is impossible to meet the conditions.");
                 }
 
                 let password = symbols.generate(length, sep, &validate);
@@ -209,7 +206,7 @@ impl Args {
                     let ee = symbols.estimate_entropy(length, sep, &validate)?;
 
                     if ee == 0.0 {
-                        return Err(Error::new("Never met entropy requirement.".to_owned()));
+                        bail!("Never met entropy requirement.");
                     }
 
                     if ee >= self.entropy {

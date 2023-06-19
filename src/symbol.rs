@@ -1,12 +1,11 @@
 use std::collections::BTreeSet;
 use std::io::BufRead;
 
+use anyhow::Result;
 use rand::rngs::OsRng;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
-
-use crate::err::Error;
 
 const ENTROPY_ESTIMATE_SAMPLES: usize = 100_000;
 const ENTROPY_SAFETY_MERGIN_RATIO: f64 = 1.05;
@@ -36,7 +35,7 @@ impl Symbols {
         }))
     }
 
-    pub fn from_bufread<R: BufRead>(r: R) -> Result<Symbols, Error> {
+    pub fn from_bufread<R: BufRead>(r: R) -> Result<Symbols> {
         let mut list = Vec::new();
 
         for l in r.lines() {
@@ -82,7 +81,7 @@ impl Symbols {
         n: usize,
         sep: &str,
         validate: impl Fn(&str) -> bool,
-    ) -> Result<f64, Error> {
+    ) -> Result<f64> {
         let base_entropy = self.base_entropy(n);
         if base_entropy == 0.0 {
             return Ok(0.0);
